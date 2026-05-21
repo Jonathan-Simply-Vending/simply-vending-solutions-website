@@ -1068,10 +1068,16 @@ em { font-style: italic; font-family: var(--font-display); font-weight: 400; }
 .svs-testimonial-marquee {
   width: 100%;
   overflow: hidden;
+  cursor: grab;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
   position: relative;
   -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 6%, #000 94%, transparent 100%);
   mask-image: linear-gradient(90deg, transparent 0, #000 6%, #000 94%, transparent 100%);
 }
+.svs-testimonial-marquee.is-dragging { cursor: grabbing; }
+.svs-testimonial-marquee.is-dragging .svs-testimonial-track { pointer-events: none; }
 .svs-testimonial-track {
   display: flex;
   gap: 32px;
@@ -1594,11 +1600,18 @@ em { font-style: italic; font-family: var(--font-display); font-weight: 400; }
 .svs-sp-gallery-marquee {
   width: 100%;
   overflow: hidden;
+  cursor: grab;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
   position: relative;
   margin-top: 40px;
   -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 4%, #000 96%, transparent 100%);
   mask-image: linear-gradient(90deg, transparent 0, #000 4%, #000 96%, transparent 100%);
 }
+.svs-sp-gallery-marquee.is-dragging { cursor: grabbing; }
+.svs-sp-gallery-marquee.is-dragging .svs-sp-gallery-track { pointer-events: none; }
+.svs-sp-gallery-marquee img { -webkit-user-drag: none; user-drag: none; pointer-events: none; }
 .svs-sp-gallery-track {
   display: flex;
   gap: 20px;
@@ -3449,7 +3462,133 @@ function Media({ src, kind, alt = "", poster, objectPosition = "center", ratio =
 
 }
 
-Object.assign(window, { Placeholder, Media, Eyebrow, Stat, FeatureRow, Icons, Btn, resolveAssetSrc });
+Object.assign(window, { Placeholder, Media, Eyebrow, Stat, FeatureRow, Icons, Btn, resolveAssetSrc, useDragMarquee });
+
+// useDragMarquee — adds click-and-drag panning to a CSS-keyframe marquee that
+// translates `track` by exactly half its width (i.e. content duplicated 2×).
+// Direction: 'rtl' = keyframes go from -50% → 0 (track scrolls right-to-left visually).
+//            'ltr' = keyframes go from 0 → -50% (also scrolls right-to-left, opposite phase).
+// After release, the CSS animation resumes from the dragged-to position via a
+// negative animation-delay. Respects prefers-reduced-motion (drag works; no auto-resume).
+function useDragMarquee({ direction = "rtl" } = {}) {
+  const wrapRef = React.useRef(null);
+  const trackRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const wrap = wrapRef.current;
+    const track = trackRef.current;
+    if (!wrap || !track) return;
+
+    const THRESHOLD = 6;
+    let dragging = false;
+    let pointerId = null;
+    let startX = 0;
+    let baseOffset = 0;
+    let moved = false;
+    let cachedDuration = 0;
+
+    const reducedMotion = () =>
+      window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const getLoopWidth = () => track.scrollWidth / 2;
+    const getDuration = () => parseFloat(getComputedStyle(track).animationDuration) || 0;
+    const getCurrentX = () => {
+      const t = getComputedStyle(track).transform;
+      if (!t || t === "none") return 0;
+      try { return new DOMMatrixReadOnly(t).m41; } catch (_) { return 0; }
+    };
+    const wrapX = (x, W) => {
+      if (W <= 0) return 0;
+      let r = x % W;
+      if (r > 0) r -= W;
+      return r;
+    };
+
+    const onPointerDown = (e) => {
+      if (e.button !== undefined && e.button !== 0) return;
+      // Ignore drags initiated on form/interactive controls inside slides
+      if (e.target.closest && e.target.closest("a,button,input,textarea,select")) return;
+
+      const W = getLoopWidth();
+      // Cache the running animation duration BEFORE we clobber it; computed
+      // animationDuration goes to "0s" once we set inline `animation: none`.
+      cachedDuration = getDuration();
+      baseOffset = wrapX(getCurrentX(), W);
+      track.style.animation = "none";
+      track.style.transform = `translate3d(${baseOffset}px, 0, 0)`;
+
+      dragging = true;
+      moved = false;
+      pointerId = e.pointerId;
+      startX = e.clientX;
+      try { wrap.setPointerCapture(e.pointerId); } catch (_) {}
+      wrap.classList.add("is-dragging");
+    };
+
+    const onPointerMove = (e) => {
+      if (!dragging || e.pointerId !== pointerId) return;
+      const dx = e.clientX - startX;
+      if (!moved && Math.abs(dx) > THRESHOLD) moved = true;
+      const W = getLoopWidth();
+      const x = wrapX(baseOffset + dx, W);
+      track.style.transform = `translate3d(${x}px, 0, 0)`;
+      if (moved) e.preventDefault();
+    };
+
+    const finish = (e) => {
+      if (!dragging) return;
+      dragging = false;
+      try { wrap.releasePointerCapture(pointerId); } catch (_) {}
+      wrap.classList.remove("is-dragging");
+
+      const W = getLoopWidth();
+      const D = cachedDuration;
+      const xNow = wrapX(getCurrentX(), W);
+
+      // Suppress one click if the pointer actually moved past the threshold
+      if (moved) {
+        const blocker = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
+        wrap.addEventListener("click", blocker, { capture: true, once: true });
+      }
+
+      if (reducedMotion() || D <= 0 || W <= 0) {
+        // Leave the dragged position in place; no auto-resume.
+        pointerId = null;
+        return;
+      }
+
+      // progress is the fraction of one cycle that has elapsed at xNow
+      let progress;
+      if (direction === "rtl") {
+        // keyframes: -W → 0  ⇒  x = -W + W·p  ⇒  p = (x + W) / W
+        progress = (xNow + W) / W;
+      } else {
+        // keyframes: 0 → -W   ⇒  x = -W·p     ⇒  p = -x / W
+        progress = -xNow / W;
+      }
+      progress = ((progress % 1) + 1) % 1;
+
+      track.style.transform = "";
+      track.style.animation = "";
+      void track.offsetWidth; // reflow so the next delay is honored fresh
+      track.style.animationDelay = `-${progress * D}s`;
+      pointerId = null;
+    };
+
+    wrap.addEventListener("pointerdown", onPointerDown);
+    wrap.addEventListener("pointermove", onPointerMove);
+    wrap.addEventListener("pointerup", finish);
+    wrap.addEventListener("pointercancel", finish);
+
+    return () => {
+      wrap.removeEventListener("pointerdown", onPointerDown);
+      wrap.removeEventListener("pointermove", onPointerMove);
+      wrap.removeEventListener("pointerup", finish);
+      wrap.removeEventListener("pointercancel", finish);
+    };
+  }, [direction]);
+
+  return { wrapRef, trackRef };
+}
 
 
 
@@ -3985,6 +4124,7 @@ function ProofStrip() {
 }
 
 function Testimonial() {
+  const { wrapRef: marqueeRef, trackRef } = useDragMarquee({ direction: "rtl" });
   const reviews = [
   {
     quote: "Honestly, the best and most reliable coffee provider we've ever worked with. Residents mention the draft bar on every single tour.",
@@ -4049,8 +4189,8 @@ function Testimonial() {
         </h2>
       </div>
 
-      <div className="svs-testimonial-marquee" aria-label="Resident manager testimonials, scrolling">
-        <div className="svs-testimonial-track">
+      <div className="svs-testimonial-marquee" ref={marqueeRef} aria-label="Resident manager testimonials, scrolling. Drag to scrub.">
+        <div className="svs-testimonial-track" ref={trackRef}>
           {loop.map((t, i) =>
           <figure className="svs-testimonial-slide" key={i} aria-hidden={i >= reviews.length ? "true" : undefined}>
               <div className="svs-quote-mark" aria-hidden="true">“</div>
@@ -4924,6 +5064,7 @@ const SERVICE_DETAILS = {
     heroSrc: "assets/service-events.jpg",
     heroObjectPosition: "center 40%",
     gallery: [
+    { src: "assets/events-gallery-hot-brunch.jpg", ratio: "3 / 2", tone: "warm", alt: "Hot brunch event setup — chafing dishes of breakfast potatoes, scrambled eggs, sausage, pancakes, and bacon, with glass dispensers of orange and cranberry juice and trays of fresh berries on a black-linen table", label: "Gallery · Hot brunch — full chafer service with juice bar", caption: "Hot brunch — chafing dishes, juice bar, fresh fruit station", className: "gG" },
     { src: "assets/events-gallery-korean-bbq-buffet.jpg", ratio: "3 / 2", tone: "warm", alt: "Catered Korean BBQ buffet — chafing dishes of quesadillas, beef bulgogi, and nacho cheese with chalkboard signage", label: "Gallery · Korean BBQ buffet — quesadillas, bulgogi, nacho cheese", caption: "Nacho and Quesadilla Bar — chalkboard menu, full chafer service", className: "gA" },
     { src: "assets/events-gallery-sundae-cup.jpg", ratio: "2 / 3", tone: "warm", alt: "Resident holding a build-your-own sundae cup loaded with caramel, M&Ms, strawberries, and chocolate sprinkles", label: "Gallery · Build-your-own sundae cup, fully loaded", caption: "Sundae bar — build-your-own, every topping on the table", className: "gB" },
     { src: "assets/events-gallery-halloween-bar.jpg", ratio: "3 / 2", tone: "deep", alt: "Halloween candy apple and dessert bar — bowls of sprinkles, M&Ms, and chocolate chips next to trays of green apples on sticks and a Happy Halloween plate", label: "Gallery · Halloween candy apple + topping bar", caption: "Halloween night — candy apple bar with full topping spread", className: "gC" },
@@ -4972,7 +5113,7 @@ const SERVICE_DETAILS = {
       {
         name: "Popular",
         items: [
-        "French toast, pancake & parfait brunch w/ mimosas",
+        "Hot brunch — pancakes, eggs, bacon, juice bar",
         "Rooftop cookout — burgers, hot dogs, kabobs",
         "Burrito & taco bar",
         "Mixology class",
@@ -4998,7 +5139,7 @@ const SERVICE_DETAILS = {
       {
         name: "Food & Drink",
         items: [
-        "French toast, pancake & parfait brunch w/ mimosas",
+        "Hot brunch — pancakes, eggs, bacon, juice bar",
         "Morning parfait bar",
         "Breakfast grab-and-go",
         "Coffee & donuts",
@@ -5030,6 +5171,39 @@ const SERVICE_DETAILS = {
     }
   }
 };
+
+function GalleryMarquee({ gallery }) {
+  const { wrapRef, trackRef } = useDragMarquee({ direction: "ltr" });
+  // Pace the scroll with the number of photos so the speed feels constant
+  // no matter how many you add (≈10s per photo, capped between 40s and 200s).
+  const duration = Math.min(200, Math.max(40, gallery.length * 10));
+  const loop = [...gallery, ...gallery];
+  return (
+    <div
+      className="svs-sp-gallery-marquee"
+      ref={wrapRef}
+      aria-label="Gallery, scrolling. Drag to scrub."
+      style={{ "--gallery-drift-duration": `${duration}s` }}>
+
+      <div className="svs-sp-gallery-track" ref={trackRef}>
+        {loop.map((g, i) => {
+          const { caption, className, ...mediaProps } = g;
+          const isDup = i >= gallery.length;
+          return (
+            <figure
+              className={`svs-sp-gallery-cell ${className || ""}`}
+              key={i}
+              aria-hidden={isDup ? "true" : undefined}>
+
+              <Media {...mediaProps} className="" />
+              {caption && <figcaption className="svs-sp-gallery-caption">{caption}</figcaption>}
+            </figure>);
+
+        })}
+      </div>
+    </div>);
+
+}
 
 function ServicePage({ id }) {
   const d = SERVICE_DETAILS[id];
@@ -5116,34 +5290,7 @@ function ServicePage({ id }) {
           { ratio: "4 / 3", tone: "deep", alt: "Detail shot — finishes and branding", label: "Gallery · Detail shot — finishes and branding", className: "g3" },
           { ratio: "3 / 4", tone: "warm", alt: "Launch-day pop-up", label: "Gallery · Launch-day pop-up", className: "g4" }];
 
-          // Pace the scroll with the number of photos so the speed feels constant
-          // no matter how many you add (≈10s per photo, capped between 40s and 200s).
-          const duration = Math.min(200, Math.max(40, gallery.length * 10));
-          const loop = [...gallery, ...gallery];
-          return (
-            <div
-              className="svs-sp-gallery-marquee"
-              aria-label="Gallery, scrolling"
-              style={{ "--gallery-drift-duration": `${duration}s` }}>
-
-              <div className="svs-sp-gallery-track">
-                {loop.map((g, i) => {
-                  const { caption, className, ...mediaProps } = g;
-                  const isDup = i >= gallery.length;
-                  return (
-                    <figure
-                      className={`svs-sp-gallery-cell ${className || ""}`}
-                      key={i}
-                      aria-hidden={isDup ? "true" : undefined}>
-
-                      <Media {...mediaProps} className="" />
-                      {caption && <figcaption className="svs-sp-gallery-caption">{caption}</figcaption>}
-                    </figure>);
-
-                })}
-              </div>
-            </div>);
-
+          return <GalleryMarquee gallery={gallery} />;
         })()}
       </section>
 
