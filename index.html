@@ -140,6 +140,7 @@ em { font-style: italic; font-family: var(--font-display); font-weight: 400; }
   line-height: .95;
   letter-spacing: -0.02em;
   margin: 0;
+  padding-bottom: 0.16em;
   text-wrap: balance;
 }
 .svs-display-lg {
@@ -149,6 +150,7 @@ em { font-style: italic; font-family: var(--font-display); font-weight: 400; }
   line-height: 1.0;
   letter-spacing: -0.018em;
   margin: 0;
+  padding-bottom: 0.12em;
   text-wrap: balance;
 }
 .svs-display-md {
@@ -158,6 +160,7 @@ em { font-style: italic; font-family: var(--font-display); font-weight: 400; }
   line-height: 1.05;
   letter-spacing: -0.015em;
   margin: 0;
+  padding-bottom: 0.1em;
   text-wrap: balance;
 }
 .svs-display-sm {
@@ -645,6 +648,7 @@ em { font-style: italic; font-family: var(--font-display); font-weight: 400; }
   letter-spacing: 0.1em;
   margin-bottom: 36px;
   color: oklch(from var(--c-onDeep) l c h / 0.8);
+  white-space: nowrap;
 }
 .svs-hero-dot {
   width: 8px; height: 8px; border-radius: 50%;
@@ -663,9 +667,13 @@ em { font-style: italic; font-family: var(--font-display); font-weight: 400; }
   font-weight: 400;
   letter-spacing: -0.025em;
   margin: 0 0 32px;
+  padding-bottom: 0.1em;
   text-wrap: balance;
 }
 .svs-hero-line-1, .svs-hero-line-2 { display: block; }
+/* Italic display descenders (the "y" in Every, "p" in pour) swing low —
+   give the last line room and never let it clip. */
+.svs-hero-line-2 { padding-bottom: 0.22em; overflow: visible; }
 .svs-hero-line-2 em { color: var(--c-accent); font-style: italic; }
 .svs-hero-sub {
   max-width: 52ch;
@@ -721,6 +729,7 @@ em { font-style: italic; font-family: var(--font-display); font-weight: 400; }
   line-height: 1;
   color: var(--c-onDeep);
   letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 .svs-ticker-dot {
   width: 4px; height: 4px; border-radius: 50%;
@@ -3697,6 +3706,7 @@ em { font-style: italic; font-family: var(--font-display); font-weight: 400; }
   font-size: clamp(42px, 5.4vw, 76px);
   line-height: 0.98;
   letter-spacing: -0.015em;
+  padding-bottom: 0.1em;
   text-wrap: balance;
 }
 .svs-pulse-title em { font-style: italic; color: var(--c-accent); }
@@ -5354,22 +5364,22 @@ const TR_DRINKS = [
 { id: "strawberry-refresher", name: "Coral Splash", group: "Refreshers",
   color: "#9C2A3E", accent: "#F58A9F", available: true, isNew: false, soon: false,
   description: "Real strawberry purée, lychee, fresh lemon, sparkling water. No high-fructose anything.",
-  serve: "Iced · 38°F", caffeine: "None", body: "Bright", brew: "Real fruit · sparkling",
+  serve: "Iced · 38°F", caffeine: "Medium", body: "Bright", brew: "Real fruit · sparkling",
   pairings: ["Pool deck", "Caprese salad", "Outdoor lunches"] },
 { id: "peach-mango", name: "Paradise Splash", group: "Refreshers",
   color: "#C56A1F", accent: "#F4A93A", available: true, isNew: true, soon: false,
   description: "Tree-ripe mango and dragonfruit, gently sparkling. Zero artificial sweeteners.",
-  serve: "Iced · 38°F", caffeine: "None", body: "Fruity", brew: "Real fruit · sparkling",
+  serve: "Iced · 38°F", caffeine: "Medium", body: "Fruity", brew: "Real fruit · sparkling",
   pairings: ["Yogurt bowl", "Banh mi", "Workout-day hydration"] },
 { id: "watermelon-mint", name: "Sunshine Splash", group: "Refreshers",
   color: "#A8324F", accent: "#F4A0A6", available: true, isNew: false, soon: false,
   description: "Cold-pressed passionfruit with a snap of fresh pineapple. Hydrating, clean, faintly sweet.",
-  serve: "Iced · 38°F", caffeine: "None", body: "Crisp", brew: "Real fruit · sparkling",
+  serve: "Iced · 38°F", caffeine: "Medium", body: "Crisp", brew: "Real fruit · sparkling",
   pairings: ["Feta salad", "Beach reads", "Friday afternoons"] },
 { id: "cucumber-lime", name: "Cucumber Lime", group: "Refreshers",
   color: "#5A8A4F", accent: "#A8D58A", available: true, isNew: false, soon: false,
   description: "Cucumber, lime, a touch of basil. The most adult thing on the rail — almost a cocktail mixer.",
-  serve: "Iced · 38°F", caffeine: "None", body: "Crisp", brew: "Real fruit · sparkling",
+  serve: "Iced · 38°F", caffeine: "Medium", body: "Crisp", brew: "Real fruit · sparkling",
   pairings: ["Cheese plate", "Lemon-poppyseed cake", "After-work wind-down"] },
 
 // ---- Iced Tea ----------------------------------------------------------
